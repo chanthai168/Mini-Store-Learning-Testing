@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { CreateUserDto} from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { InsufficientBalanceException } from '../../common/exceptions/insufficient-balance.exception';
+import { PrismaService } from '../../prisma/prisma.service.js';
+import { CreateUserDto} from './dto/create-user.dto.js';
+import { UpdateUserDto } from './dto/update-user.dto.js';
+import { InsufficientBalanceException } from '../../common/exceptions/insufficient-balance.exception.js';
 
 @Injectable()
 export class UsersService {
@@ -16,7 +16,7 @@ export class UsersService {
     }
 
     async createUser(user:CreateUserDto): Promise<string>{
-        await this.prismaService.user.create({data:user});
+        await this.prismaService.user.create({data: user});
         return 'User created' + ' ' + user.email +' ' + user.name;
     }
 

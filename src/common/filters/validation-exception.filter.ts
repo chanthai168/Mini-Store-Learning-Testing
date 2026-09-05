@@ -2,85 +2,103 @@ import {
   ExceptionFilter,
   Catch,
   ArgumentsHost,
-  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Logger,
 } from '@nestjs/common';
-import { Response } from 'express'; 
+import { Response } from 'express';
 import { ValidationError } from 'class-validator';
+import { Prisma } from '../../generated/prisma/client.js';
 
-@Catch(BadRequestException)
-export class ValidationExceptionFilter implements ExceptionFilter {
+interface ApiErrorResponse {
+  statusCode: number;
+  timestamp: string;
+  path: string;
+  method: string;
+  message: string | string[];
+  errorCode?: string;          
+  details?: Record<string, any>; 
+}
 
-  catch(exception: BadRequestException, host: ArgumentsHost) {
+@Catch()
+export class AllExceptionsFilter implements ExceptionFilter {
+  private readonly logger = new Logger(AllExceptionsFilter.name);
+
+  catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const status = exception.getStatus();
-    // what is ctx ? why we set ctx = host.switchToHttp()
+    const request = ctx.getRequest<Request>();
 
-    const exceptionResponse = exception.getResponse() as any;
+    let status: number;
+    let errorResponse: any;
 
-    // Safely extract possible validation errors
-    const rawErrors = exceptionResponse?.message;
+    if (exception instanceof HttpException) {
 
-    // for understanding error object purposes
-    this.LogErrorObject(exception);
+      status = exception.getStatus();
+      const res = exception.getResponse() as any;
+      
+      errorResponse = typeof res === 'string' ? { message: res } : res;
+      
+      if(res.errorCode && res.errorCode === 'VALIDATION_ERROR'){
+        errorResponse.details = this.formatValidationErrors(res.error);
+      }
 
-    // Handle Error response with custom format if it's a Validation Error
-    if (Array.isArray(rawErrors) && rawErrors.length > 0 && this.isValidationError(rawErrors[0])) {
-      const formattedErrors = this.formatErrors(rawErrors as ValidationError[]);
+    } 
 
-      return response.status(status).json({
-        statusCode: status,
-        message: 'Validation failed',
-        errors: formattedErrors,
-        timestamp: new Date().toISOString(),
-      });
+    else if(exception instanceof Prisma.PrismaClientKnownRequestError){
+      switch (exception.code) {
+        case 'P2002':
+          status = HttpStatus.CONFLICT;
+          errorResponse = `A record with this already exists`;
+          break;
+
+        case 'P2025':
+          status = HttpStatus.CONFLICT;
+          errorResponse = 'Resource Notfound';
+          break;
+
+        default:
+          status = HttpStatus.INTERNAL_SERVER_ERROR;
+          errorResponse = { message: 'Internal server error' };
+          this.logger.error(exception);
+          break;
+      }
+    }
+    
+    else {
+      status = HttpStatus.INTERNAL_SERVER_ERROR;
+      errorResponse = { message: 'Internal server error' };
+      this.logger.error(exception);
     }
 
-    // Fallback for other BadRequestExceptions
-    const message =
-      typeof exceptionResponse === 'string'
-        ? exceptionResponse
-        : exceptionResponse?.message || exception.message || 'Bad Request';
-
-    response.status(status).json({
+    const { message, errorCode, statusCode, details, ...extra } = errorResponse;
+    
+    // Build the final response body
+    const body: ApiErrorResponse = {
       statusCode: status,
-      message: Array.isArray(message) ? message[0] : message,
       timestamp: new Date().toISOString(),
-    });
+      path: request.url,
+      method: request.method,
+      message: errorResponse.message || 'Unknown error',
+      errorCode: errorResponse.errorCode,
+      details: errorResponse.details,
+    };
+
+    if (status >= 500) {
+      this.logger.error(
+        `${request.method} ${request.url} ${status} - ${errorResponse.message}`,
+        exception instanceof Error ? exception.stack : '',
+      );
+    } else {
+      this.logger.warn(
+        `${request.method} ${request.url} ${status} - ${errorResponse.message}`,
+      );
+    }
+
+    response.status(status).json(body);
   }
 
-  /** Type guard to check if the object looks like a ValidationError */
-  private isValidationError(error: any): error is ValidationError {
-    return (
-      error &&
-      typeof error === 'object' &&
-      'property' in error &&
-      'constraints' in error &&
-      'children' in error
-    );
-  }
-
-
-  private LogErrorObject(exception: BadRequestException){
-    console.log('Exception')
-    console.log(exception);
-    console.log();
-
-    const exceptionResponse = exception.getResponse() as any;
-
-    console.log('Exception.getResponse');
-    console.log(exceptionResponse);
-    console.log();
-
-    // Safely extract possible validation errors
-    const rawErrors = exceptionResponse?.message;
-
-    console.log('Exception.getResponse.message');
-    console.log(rawErrors);
-    console.log();
-  }
-
-  private formatErrors(errors: ValidationError[]): Record<string, string[]> {
+  private formatValidationErrors(errors: ValidationError[]): Record<string, string[]> {
     const result: Record<string, string[]> = {};
 
     for (const error of errors) {
@@ -93,7 +111,7 @@ export class ValidationExceptionFilter implements ExceptionFilter {
 
       // Nested validation support
       if (error.children && error.children.length > 0) {
-        const nested = this.formatErrors(error.children);
+        const nested = this.formatValidationErrors(error.children);
         for (const key of Object.keys(nested)) {
           result[`${field}.${key}`] = nested[key];
         }
@@ -102,5 +120,4 @@ export class ValidationExceptionFilter implements ExceptionFilter {
 
     return result;
   }
-
 }

@@ -11,6 +11,14 @@ export class CreateUserDto {
   @MaxLength(255)
   email!: string;
 
+  @ApiProperty({ 
+    description: 'Please use strong password including Capital letter, letter, Number, Special character and at lease 8 letter'
+  })
+  @IsString()
+  @MaxLength(32)
+  @MinLength(8)
+  password!: string;
+
   @ApiPropertyOptional({ 
     example: 'John Doe',
     description: 'User full name (optional)'

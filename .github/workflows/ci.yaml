@@ -46,6 +46,17 @@ jobs:
         env:
           DATABASE_URL: postgres://testuser:testpassword@localhost:5432/test_db
 
+      - name: Debug which DB Prisma is actually using
+        run: |
+          echo "=== process.env.DATABASE_URL ==="
+          echo $DATABASE_URL
+          echo "=== Prisma env ==="
+          npx prisma env
+          echo "=== Tables that exist ==="
+          npx prisma db execute --stdin <<< "SELECT tablename FROM pg_tables WHERE schemaname = 'public';"
+        env:
+          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/test_db
+
       - name: Run Unit Tests
         run: npm run test:unit -- --ci --maxWorkers=2
         env:

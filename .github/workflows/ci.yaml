@@ -42,7 +42,7 @@ jobs:
         run: npx prisma generate
 
       - name: Apply DB Migrations & Seed
-        run: npx prisma migrate reset --force --skip-generate
+        run: npx prisma migrate reset --force
         env:
           DATABASE_URL: postgres://testuser:testpassword@localhost:5432/test_db
 

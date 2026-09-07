@@ -1,0 +1,62 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ main, dev, develop ]
+  pull_request:
+    branches: [ main, dev, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Run Unit Tests
+        run: npm run test:unit -- --ci --maxWorkers=2
+
+      - name: Apply DB Migrations & Seed
+        run: npx prisma migrate reset --force --skip-generate
+        env:
+          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/test_db
+
+      - name: Run E2E Tests
+        run: npm run test:e2e -- --ci --runInBand
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/test_db
+
+      - name: Generate Test Coverage
+        run: npm run test:cov -- --ci --maxWorkers=2
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/test_db

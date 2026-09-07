@@ -52,6 +52,13 @@ describe('ProductController (E2E)', () => {
       expect(response.body.price).toBe(500);
     });
 
+    it('should throw bad request exception', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/products')
+        .send({price:'123'})
+        .expect(HttpStatus.BAD_REQUEST);
+    })
+
     it('should return 409 Conflict if product name already exists', async () => {
       await request(app.getHttpServer())
         .post('/products')

@@ -43,6 +43,9 @@ jobs:
 
       - name: Run Unit Tests
         run: npm run test:unit -- --ci --maxWorkers=2
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/test_db
 
       - name: Apply DB Migrations & Seed
         run: npx prisma migrate reset --force --skip-generate

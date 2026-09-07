@@ -5,10 +5,12 @@ on:
     branches: [ main, dev, develop ]
   pull_request:
     branches: [ main, dev, develop ]
-
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    env:   # ← available to ALL steps
+      DATABASE_URL: postgres://testuser:testpassword@localhost:5432/test_db
 
     services:
       postgres:
@@ -26,51 +28,26 @@ jobs:
           --health-retries 5
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js Environment
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install Dependencies
-        run: npm ci
+      - run: npm ci
 
       - name: Generate Prisma Client
         run: npx prisma generate
 
-      - name: Apply DB Migrations & Seed
+      - name: Apply DB Migrations
         run: npx prisma migrate reset --force
-        env:
-          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/test_db
-
-      - name: Debug which DB Prisma is actually using
-        run: |
-          echo "=== process.env.DATABASE_URL ==="
-          echo $DATABASE_URL
-          echo "=== Prisma env ==="
-          npx prisma env
-          echo "=== Tables that exist ==="
-          npx prisma db execute --stdin <<< "SELECT tablename FROM pg_tables WHERE schemaname = 'public';"
-        env:
-          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/test_db
 
       - name: Run Unit Tests
         run: npm run test:unit -- --ci --maxWorkers=2
         env:
           NODE_ENV: test
-          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/test_db
 
       - name: Run E2E Tests
         run: npm run test:e2e -- --ci --runInBand
         env:
           NODE_ENV: test
-          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/test_db
-
-      - name: Generate Test Coverage
-        run: npm run test:cov -- --ci --maxWorkers=2
-        env:
-          NODE_ENV: test
-          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/test_db
